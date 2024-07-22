@@ -5,19 +5,19 @@ import 'package:google_ml_kit/google_ml_kit.dart';
 
 class CameraService {
   CameraController? _cameraController;
-  CameraController? get cameraController => this._cameraController;
+  CameraController? get cameraController => _cameraController;
 
   InputImageRotation? _cameraRotation;
-  InputImageRotation? get cameraRotation => this._cameraRotation;
+  InputImageRotation? get cameraRotation => _cameraRotation;
 
   String? _imagePath;
-  String? get imagePath => this._imagePath;
+  String? get imagePath => _imagePath;
 
   Future<void> initialize() async { 
     if (_cameraController != null) return;
     CameraDescription description = await _getCameraDescription();
     await _setupCameraController(description: description);
-    this._cameraRotation = rotationIntToImageRotation(
+    _cameraRotation = rotationIntToImageRotation(
       description.sensorOrientation,
     );
   }
@@ -33,7 +33,7 @@ class CameraService {
     // sets up the camera controller with the provided camera description and initializes it.
     required CameraDescription description,
   }) async {
-    this._cameraController = CameraController(
+    _cameraController = CameraController(
       description,
       ResolutionPreset.high,
       enableAudio: false,
@@ -78,7 +78,7 @@ class CameraService {
 
   dispose() async {
     // disposes of the camera controller when it's no longer needed.
-    await this._cameraController?.dispose();
-    this._cameraController = null;
+    await _cameraController?.dispose();
+    _cameraController = null;
   }
 }

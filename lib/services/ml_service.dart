@@ -3,9 +3,9 @@ import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:camera/camera.dart';
-import 'package:face_net_authentication/pages/db/databse_helper.dart';
-import 'package:face_net_authentication/pages/models/user.model.dart';
-import 'package:face_net_authentication/services/image_converter.dart';
+//import 'package:spoofers/pages/db/databse_helper.dart';
+//import 'package:face_net_authentication/pages/models/user.model.dart';
+import 'package:spoofers/services/image_converter.dart';
 import 'package:flutter/services.dart';
 import 'package:google_ml_kit/google_ml_kit.dart';
 import 'package:image/image.dart' as imglib;
@@ -120,8 +120,7 @@ class MLService {
       // final shape = [1, 3, 128, 128];
       final shape = [1, 3, 80, 80];
       // final shape = [1, 80, 80, 3];
-      final inputOrt =
-          OrtValueTensor.createTensorWithDataList(await input, shape);
+      final inputOrt = OrtValueTensor.createTensorWithDataList(input, shape);
       final inputName = session.inputNames[0];
 
       // Create inputs map
@@ -135,8 +134,8 @@ class MLService {
 
       final FAStensor = outputs[0]?.value;
 
-      print("===> outputs.length: " + outputs.length.toString());
-      print("===> FAStensor: " + FAStensor.toString());
+      print("===> outputs.length: ${outputs.length}");
+      print("===> FAStensor: $FAStensor");
 
       List<double> FASTensorList = [];
 
@@ -150,8 +149,7 @@ class MLService {
       List<double> probabilities = softmax(FASTensorList);
       // probabilities = [0.6734, 0.3266];
       // probabilities = [0.3349, 0.6651];
-      print("===> probabilities: " +
-          probabilities.toString()); // prints the probabilities
+      print("===> probabilities: $probabilities"); // prints the probabilities
 
       // release onnx components
       inputOrt.release();
@@ -203,7 +201,7 @@ class MLService {
     final file = File(join(directory!.path, 'resized.png'));
     try {
       await file.writeAsBytes(imglib.encodePng(img));
-      print("===> file.path: " + file.path);
+      print("===> file.path: ${file.path}");
     } catch (e) {
       print('Error: $e');
     }
@@ -237,7 +235,7 @@ class MLService {
       }
       var interpreterOptions = InterpreterOptions()..addDelegate(delegate);
 
-      this._interpreter = await Interpreter.fromAsset(
+      _interpreter = await Interpreter.fromAsset(
           'assets/ep050-loss23.614.tflite', //mobilefacenet.tflite
           options: interpreterOptions);
     } catch (e) {
@@ -263,21 +261,21 @@ class MLService {
     // _preProcess ends
 
     input = input.reshape([1, 112, 112, 3]);
-    print("==> input : " + input.toString());
+    print("==> input : $input");
     List output = List.generate(1, (index) => List.filled(256, 0));
 
-    this._interpreter?.run(input, output);
+    _interpreter?.run(input, output);
     // print("==> ori output : " + output.toString());
 
     output = output.reshape([256]);
     // print("==> mod output : " + output.toString());
 
-    this._predictedData = List.from(output);
+    _predictedData = List.from(output);
   }
 
   Future<User?> predict() async {
     // print("===> this._predictedData" + this._predictedData.toString());
-    return _searchResult(this._predictedData);
+    return _searchResult(_predictedData);
   }
 
   List<double> softmax(List<double> scores) {
@@ -327,9 +325,9 @@ class MLService {
   }
 
   Future<User?> _searchResult(List predictedData) async {
-    DatabaseHelper _dbHelper = DatabaseHelper.instance;
+    DatabaseHelper dbHelper = DatabaseHelper.instance;
 
-    List<User> users = await _dbHelper.queryAllUsers();
+    List<User> users = await dbHelper.queryAllUsers();
     double minDist = 999;
     double currDist = 0.0;
     User? predictedResult;
@@ -363,7 +361,7 @@ class MLService {
   }
 
   void setPredictedData(value) {
-    this._predictedData = value;
+    _predictedData = value;
   }
 
   dispose() {
@@ -381,6 +379,6 @@ class MLService {
 
 extension Precision on double {
   double toFloat() {
-    return double.parse(this.toStringAsFixed(2));
+    return double.parse(toStringAsFixed(2));
   }
 }
