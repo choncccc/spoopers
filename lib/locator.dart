@@ -1,13 +1,13 @@
-import 'package:spoofers/services/camera.service.dart';
-import 'package:spoofers/services/ml_service.dart';
-import 'package:spoofers/services/face_detector_service.dart';
 import 'package:get_it/get_it.dart';
+import 'services/camera.service.dart';
+import 'services/face_detector_service.dart';
 
-final locator = GetIt.instance;
+final GetIt locator = GetIt.instance;
 
-void setupServices() {
-  locator.registerLazySingleton<CameraService>(() => CameraService());
-  locator
-      .registerLazySingleton<FaceDetectorService>(() => FaceDetectorService());
-  locator.registerLazySingleton<MLService>(() => MLService());
+Future<void> setupLocator() async {
+  // Simulate async work
+  await Future.delayed(Duration(seconds: 1));
+
+  locator.registerLazySingleton(() => CameraService());
+  locator.registerLazySingleton(() => FaceDetectorService());
 }

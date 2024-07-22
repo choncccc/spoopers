@@ -3,13 +3,13 @@ import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:camera/camera.dart';
-import 'package:spoofers/image_converter.dart';
 import 'package:flutter/services.dart';
 import 'package:google_ml_kit/google_ml_kit.dart';
 import 'package:image/image.dart' as imglib;
 import 'package:onnxruntime/onnxruntime.dart';
 import 'package:path/path.dart';
 import 'package:path_provider/path_provider.dart' as path;
+import 'package:spoofers/image_converter.dart';
 import 'package:tflite_flutter/tflite_flutter.dart';
 
 class MLService {
@@ -34,8 +34,6 @@ class MLService {
     return session;
   }
 
-
-  // MODIFIED
   Future<List?> MODIFIEDisFaceSpoofedWithModel(
       CameraImage cameraImage, Face? face) async {
     print("===> isFaceSpoofedWithModel Starts");
@@ -48,15 +46,15 @@ class MLService {
       final processedData = await _MODIFIEDpreProcess(cameraImage, face);
       final processedImg = processedData[0] as imglib.Image;
       final input = processedData[1] as Float32List;
+
       final shape = [1, 3, 80, 80];
       final inputOrt = OrtValueTensor.createTensorWithDataList(input, shape);
       final inputName = session.inputNames[0];
 
       final inputs = {inputName: inputOrt};
-
       final runOptions = OrtRunOptions();
-      final outputs = session.run(runOptions, inputs);
 
+      final outputs = session.run(runOptions, inputs);
       final FAStensor = outputs[0]?.value;
 
       print("===> outputs.length: ${outputs.length}");
@@ -71,9 +69,8 @@ class MLService {
       }
 
       List<double> probabilities = softmax(FASTensorList);
-      print("===> probabilities: $probabilities"); 
+      print("===> probabilities: $probabilities");
 
-      // release onnx components
       inputOrt.release();
       runOptions.release();
       session.release();
@@ -85,7 +82,6 @@ class MLService {
     }
   }
 
-  // MODIFIED
   Future<List> _MODIFIEDpreProcess(CameraImage image, Face faceDetected) async {
     imglib.Image croppedImage = _cropFace(image, faceDetected);
 
@@ -99,16 +95,15 @@ class MLService {
     } catch (e) {
       print('Error: $e');
     }
+
     Float32List imageAsList = imageToByteListFloat32(croppedImage, 80);
+
     for (int i = 0; i < imageAsList.length; i++) {
       imageAsList[i] = imageAsList[i];
     }
     return [img, imageAsList];
   }
 
-  // = = = = = = = = = = = = = = = //
-  //   FACE RECOGNITION  (TFLITE)  //
-  // = = = = = = = = = = = = = = = //
   Future initialize() async {
     late Delegate delegate;
     try {
@@ -140,7 +135,6 @@ class MLService {
 
     imglib.Image croppedImage = _cropFace(cameraImage, face);
 
-
     imglib.Image img;
     img = imglib.copyResizeCropSquare(croppedImage, 112);
     List input = imageToByteListFloat32(img, 112);
@@ -155,6 +149,7 @@ class MLService {
 
     _predictedData = List.from(output);
   }
+
 
 
   List<double> softmax(List<double> scores) {
@@ -197,28 +192,7 @@ class MLService {
     return convertedBytes.buffer.asFloat32List();
   }
 
-  
-  double _euclideanDistance(List? e1, List? e2) {
-    if (e1 == null || e2 == null) throw Exception("Null argument");
-
-    double sum = 0.0;
-    for (int i = 0; i < e1.length; i++) {
-      sum += pow((e1[i] - e2[i]), 2);
-    }
-    return sqrt(sum);
-  }
-
-  void setPredictedData(value) {
-    _predictedData = value;
-  }
-
   dispose() {
     _interpreter?.close();
-  }
-}
-
-extension Precision on double {
-  double toFloat() {
-    return double.parse(toStringAsFixed(2));
   }
 }

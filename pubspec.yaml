@@ -79,6 +79,7 @@ flutter:
     - assets/FaceBagNet_color_96.onnx
     - assets/AntiSpoofing_bin_1.5_128.onnx
     - assets/2.7_80x80_MiniFASNetV2.onnx
+    - assets/img.jpg
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/assets-and-images/#resolution-aware
 
