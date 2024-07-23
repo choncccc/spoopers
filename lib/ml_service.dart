@@ -3,16 +3,19 @@ import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:camera/camera.dart';
+import 'package:flutter/foundation.dart';
+import 'package:spoofers/image_converter.dart';
 import 'package:flutter/services.dart';
 import 'package:google_ml_kit/google_ml_kit.dart';
 import 'package:image/image.dart' as imglib;
 import 'package:onnxruntime/onnxruntime.dart';
 import 'package:path/path.dart';
+import 'package:logger/logger.dart';
 import 'package:path_provider/path_provider.dart' as path;
-import 'package:spoofers/image_converter.dart';
 import 'package:tflite_flutter/tflite_flutter.dart';
 
 class MLService {
+  var logger = Logger();
   Interpreter? _interpreter;
   double threshold = 0.5;
   List _predictedData = [];
@@ -20,8 +23,9 @@ class MLService {
   double dist = 0;
 
   // = = = = = = = = = = = //
-  //  ANTI SPOOFING (onnx) //
+  //  ANTI SPOOFING (ONNX) //
   // = = = = = = = = = = = //
+
   Future<OrtSession> loadModelFromAssets() async {
     OrtEnv.instance.init();
     final sessionOptions = OrtSessionOptions();
@@ -36,7 +40,7 @@ class MLService {
 
   Future<List?> MODIFIEDisFaceSpoofedWithModel(
       CameraImage cameraImage, Face? face) async {
-    print("===> isFaceSpoofedWithModel Starts");
+    logger.d("===> isFaceSpoofedWithModel Starts");
 
     try {
       final session = await loadModelFromAssets();
@@ -46,22 +50,19 @@ class MLService {
       final processedData = await _MODIFIEDpreProcess(cameraImage, face);
       final processedImg = processedData[0] as imglib.Image;
       final input = processedData[1] as Float32List;
-
       final shape = [1, 3, 80, 80];
       final inputOrt = OrtValueTensor.createTensorWithDataList(input, shape);
       final inputName = session.inputNames[0];
 
       final inputs = {inputName: inputOrt};
       final runOptions = OrtRunOptions();
-
       final outputs = session.run(runOptions, inputs);
-      final FAStensor = outputs[0]?.value;
 
-      print("===> outputs.length: ${outputs.length}");
-      print("===> FAStensor: $FAStensor");
+      final FAStensor = outputs[0]?.value;
+      logger.d("===> outputs.length: ${outputs.length}");
+      logger.d("===> FAStensor: $FAStensor");
 
       List<double> FASTensorList = [];
-
       if (FAStensor != null &&
           FAStensor is List<List<double>> &&
           FAStensor.isNotEmpty) {
@@ -71,40 +72,41 @@ class MLService {
       List<double> probabilities = softmax(FASTensorList);
       print("===> probabilities: $probabilities");
 
+      // Release ONNX components
       inputOrt.release();
       runOptions.release();
       session.release();
-      print("===> isFaceSpoofedWithModel Ends");
+      logger.d("===> isFaceSpoofedWithModel Ends");
       return [processedImg, probabilities];
     } catch (e) {
-      print('An error occurred: $e');
+      logger.d('An error occurred: $e');
       return null;
     }
   }
 
   Future<List> _MODIFIEDpreProcess(CameraImage image, Face faceDetected) async {
     imglib.Image croppedImage = _cropFace(image, faceDetected);
+    imglib.Image img = imglib.copyResizeCropSquare(croppedImage, 80);
 
-    imglib.Image img;
-    img = imglib.copyResizeCropSquare(croppedImage, 80);
     final directory = await path.getExternalStorageDirectory();
     final file = File(join(directory!.path, 'resized.png'));
+
     try {
       await file.writeAsBytes(imglib.encodePng(img));
-      print("===> file.path: ${file.path}");
+      logger.d("===> file.path: ${file.path}");
     } catch (e) {
-      print('Error: $e');
+      logger.d('Error: $e');
     }
 
     Float32List imageAsList = imageToByteListFloat32(croppedImage, 80);
-
-    for (int i = 0; i < imageAsList.length; i++) {
-      imageAsList[i] = imageAsList[i];
-    }
     return [img, imageAsList];
   }
 
-  Future initialize() async {
+  // = = = = = = = = = = = = = = = //
+  //   FACE RECOGNITION (TFLITE)   //
+  // = = = = = = = = = = = = = = = //
+
+  Future<void> initialize() async {
     late Delegate delegate;
     try {
       if (Platform.isAndroid) {
@@ -124,7 +126,7 @@ class MLService {
           'assets/ep050-loss23.614.tflite',
           options: interpreterOptions);
     } catch (e) {
-      print('Failed to load model.');
+      logger.d('Failed to load model.');
       print(e);
     }
   }
@@ -134,23 +136,18 @@ class MLService {
     if (face == null) throw Exception('Face is null');
 
     imglib.Image croppedImage = _cropFace(cameraImage, face);
-
-    imglib.Image img;
-    img = imglib.copyResizeCropSquare(croppedImage, 112);
+    imglib.Image img = imglib.copyResizeCropSquare(croppedImage, 112);
     List input = imageToByteListFloat32(img, 112);
 
     input = input.reshape([1, 112, 112, 3]);
-    print("==> input : $input");
+    logger.d("==> input : $input");
     List output = List.generate(1, (index) => List.filled(256, 0));
 
     _interpreter?.run(input, output);
-
     output = output.reshape([256]);
 
     _predictedData = List.from(output);
   }
-
-
 
   List<double> softmax(List<double> scores) {
     double maxScore = scores.reduce(max);
@@ -172,12 +169,11 @@ class MLService {
 
   imglib.Image _convertCameraImage(CameraImage image) {
     var img = convertToImage(image);
-    var img1 = imglib.copyRotate(img, -90);
-    return img1;
+    return imglib.copyRotate(img, -90);
   }
 
   Float32List imageToByteListFloat32(imglib.Image image, int imageSize) {
-    var convertedBytes = Float32List(1 * imageSize * imageSize * 3);
+    var convertedBytes = Float32List(imageSize * imageSize * 3);
     var buffer = Float32List.view(convertedBytes.buffer);
     int pixelIndex = 0;
 
@@ -192,7 +188,27 @@ class MLService {
     return convertedBytes.buffer.asFloat32List();
   }
 
-  dispose() {
+  double _euclideanDistance(List? e1, List? e2) {
+    if (e1 == null || e2 == null) throw Exception("Null argument");
+
+    double sum = 0.0;
+    for (int i = 0; i < e1.length; i++) {
+      sum += pow((e1[i] - e2[i]), 2);
+    }
+    return sqrt(sum);
+  }
+
+  void setPredictedData(value) {
+    _predictedData = value;
+  }
+
+  void dispose() {
     _interpreter?.close();
+  }
+}
+
+extension Precision on double {
+  double toFloat() {
+    return double.parse(toStringAsFixed(2));
   }
 }

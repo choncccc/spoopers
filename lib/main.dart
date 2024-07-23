@@ -2,15 +2,21 @@ import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:image/image.dart' as imglib;
 import 'locator.dart';
-import 'services/camera.service.dart';
-import 'services/face_detector_service.dart';
+import 'camera.service.dart';
+import 'face_detector_service.dart';
 import 'utils.dart';
+import 'dart:developer';
+import 'ml_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await setupLocator(); // Await the Future returned by setupLocator
-  imglib.Image basisImage = await loadBasisImage();
-  locator<FaceDetectorService>().initialize();
+  await setupLocator();
+  final imglib.Image? basisImage = await loadBasisImage();
+  if (basisImage == null) {
+    print('Failed to load basis image. Exiting...');
+    return;
+  }
+  await locator<FaceDetectorService>().initialize(basisImage);
   runApp(MyApp());
 }
 
@@ -34,7 +40,9 @@ class FaceDetectionScreen extends StatefulWidget {
 
 class _FaceDetectionScreenState extends State<FaceDetectionScreen> {
   final CameraService _cameraService = locator<CameraService>();
-  final FaceDetectorService _faceDetectorService = locator<FaceDetectorService>();
+  final FaceDetectorService _faceDetectorService =
+      locator<FaceDetectorService>();
+  final MLService _mlService = locator<MLService>();
 
   @override
   void initState() {
@@ -44,6 +52,7 @@ class _FaceDetectionScreenState extends State<FaceDetectionScreen> {
 
   void _startUp() async {
     await _cameraService.initialize();
+    await _mlService.initialize();
     setState(() {});
   }
 
@@ -51,6 +60,7 @@ class _FaceDetectionScreenState extends State<FaceDetectionScreen> {
   void dispose() {
     _cameraService.dispose();
     _faceDetectorService.dispose();
+    _mlService.dispose();
     super.dispose();
   }
 
@@ -66,11 +76,15 @@ class _FaceDetectionScreenState extends State<FaceDetectionScreen> {
               children: [
                 CameraPreview(_cameraService.cameraController!),
                 if (_faceDetectorService.faceDetected)
-                  const Center(
+                  Center(
                     child: Text(
-                      'Face Detected',
+                      _faceDetectorService.isSpoofed
+                          ? 'Face Detected (Spoofed)'
+                          : 'Face Detected (Live)',
                       style: TextStyle(
-                        color: Colors.green,
+                        color: _faceDetectorService.isSpoofed
+                            ? Colors.red
+                            : Colors.green,
                         fontSize: 24,
                         fontWeight: FontWeight.bold,
                       ),

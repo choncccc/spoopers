@@ -1,146 +1,101 @@
 import 'package:camera/camera.dart';
-import 'package:flutter/services.dart';
+import 'package:flutter/material.dart';
 import 'package:google_ml_kit/google_ml_kit.dart';
 import 'package:image/image.dart' as imglib;
-import 'package:spoofers/locator.dart';
-import 'package:spoofers/services/camera.service.dart';
+import 'package:logger/logger.dart';
+import 'ml_service.dart';
+import 'package:logger/logger.dart';
+import 'dart:io';
 
 class FaceDetectorService {
-  final CameraService _cameraService = locator<CameraService>();
-
+  var logger = Logger();
   late FaceDetector _faceDetector;
-  FaceDetector get faceDetector => _faceDetector;
+  final MLService _mlService = MLService();
 
-  List<Face> _faces = [];
-  List<Face> get faces => _faces;
-  bool get faceDetected => _faces.isNotEmpty;
+  bool _faceDetected = false;
+  bool get faceDetected => _faceDetected;
+  bool _isSpoofed = false;
+  bool get isSpoofed => _isSpoofed;
 
-  void initialize() {
-    _faceDetector = GoogleMlKit.vision.faceDetector(
-      FaceDetectorOptions(
-        performanceMode: FaceDetectorMode.accurate,
-        enableLandmarks: true,
-      ),
-    );
-  }
-
-  Future<void> detectFacesFromImage(CameraImage image) async {
-    final WriteBuffer allBytes = WriteBuffer();
-    for (final Plane plane in image.planes) {
-      allBytes.putUint8List(plane.bytes);
+  Future<void> initialize(imglib.Image basisImage) async {
+    try {
+      _faceDetector = GoogleMlKit.vision.faceDetector(
+        FaceDetectorOptions(
+          performanceMode: FaceDetectorMode.accurate,
+          enableClassification: true,
+          enableTracking: true,
+        ),
+      );
+      await _mlService.initialize();
+    } catch (e) {
+      logger.d('Error initializing FaceDetectorService: $e');
+      // handle error here
     }
-    final bytes = allBytes.done().buffer.asUint8List();
-
-    InputImageData inputImageData = InputImageData(
-      imageRotation:
-          _cameraService.cameraRotation ?? InputImageRotation.rotation0deg,
-      inputImageFormat: InputImageFormat.yuv420,
-      size: Size(image.width.toDouble(), image.height.toDouble()),
-      planeData: image.planes.map(
-        (Plane plane) {
-          return InputImagePlaneMetadata(
-            bytesPerRow: plane.bytesPerRow,
-            height: plane.height,
-            width: plane.width,
-          );
-        },
-      ).toList(),
-    );
-
-    InputImage inputImage = InputImage.fromBytes(
-      bytes: bytes,
-      inputImageData: inputImageData,
-    );
-
-    _faces = await _faceDetector.processImage(inputImage);
   }
 
-  imglib.Image convertToImage(CameraImage image) {
-    if (image.format.group == ImageFormatGroup.yuv420) {
-      return _convertYUV420(image);
-    } else if (image.format.group == ImageFormatGroup.bgra8888) {
-      return _convertBGRA8888(image);
-    }
-    throw Exception('Image format not supported');
-  }
+  Future<void> detectFaces(CameraImage image) async {
+    try {
+      const InputImageRotation rotation = InputImageRotation.rotation0deg;
 
-  imglib.Image _convertBGRA8888(CameraImage image) {
-    return imglib.Image.fromBytes(
-      image.width,
-      image.height,
-      image.planes[0].bytes,
-      format: imglib.Format.bgra,
-    );
-  }
+      final InputImageData inputImageData = InputImageData(
+        size: Size(image.width.toDouble(), image.height.toDouble()),
+        imageRotation: rotation,
+        inputImageFormat: _getInputImageFormat(image.format.group),
+        planeData: image.planes.map(
+          (plane) {
+            return InputImagePlaneMetadata(
+              bytesPerRow: plane.bytesPerRow,
+              height: plane.height,
+              width: plane.width,
+            );
+          },
+        ).toList(),
+      );
 
-  imglib.Image _convertYUV420(CameraImage image) {
-    int width = image.width;
-    int height = image.height;
-    var img = imglib.Image(width, height);
-    const int hexFF = 0xFF000000;
-    final int uvyButtonStride = image.planes[1].bytesPerRow;
-    final int? uvPixelStride = image.planes[1].bytesPerPixel;
-    for (int x = 0; x < width; x++) {
-      for (int y = 0; y < height; y++) {
-        final int uvIndex =
-            uvPixelStride! * (x / 2).floor() + uvyButtonStride * (y / 2).floor();
-        final int index = y * width + x;
-        final yp = image.planes[0].bytes[index];
-        final up = image.planes[1].bytes[uvIndex];
-        final vp = image.planes[2].bytes[uvIndex];
-        int r = (yp + vp * 1436 / 1024 - 179).round().clamp(0, 255);
-        int g = (yp - up * 46549 / 131072 + 44 - vp * 93604 / 131072 + 91)
-            .round()
-            .clamp(0, 255);
-        int b = (yp + up * 1814 / 1024 - 227).round().clamp(0, 255);
-        img.data[index] = hexFF | (b << 16) | (g << 8) | r;
+      final InputImage inputImage = InputImage.fromBytes(
+        bytes: image.planes[0].bytes,
+        inputImageData: inputImageData,
+      );
+
+      final faces = await _faceDetector.processImage(inputImage);
+
+      if (faces.isNotEmpty) {
+        _faceDetected = true;
+        final face = faces.first; // change this if there are more faces
+        final result =
+            await _mlService.MODIFIEDisFaceSpoofedWithModel(image, face);
+        if (result != null) {
+          final probabilities = result[1] as List<double>;
+          _isSpoofed = probabilities[0] > _mlService.threshold;
+        }
+      } else {
+        _faceDetected = false;
+        _isSpoofed = false;
       }
+    } catch (e) {
+      debugPrint('Error detecting faces: $e');
+      _faceDetected = false;
+      _isSpoofed = false;
     }
-    return img;
   }
 
-  Future<List<Face>> detect(CameraImage image, InputImageRotation rotation) {
-    final faceDetector = GoogleMlKit.vision.faceDetector(
-      FaceDetectorOptions(
-        performanceMode: FaceDetectorMode.accurate,
-        enableLandmarks: true,
-      ),
-    );
-    final WriteBuffer allBytes = WriteBuffer();
-    for (final Plane plane in image.planes) {
-      allBytes.putUint8List(plane.bytes);
+  InputImageFormat _getInputImageFormat(ImageFormatGroup formatGroup) {
+    switch (formatGroup) {
+      case ImageFormatGroup.yuv420:
+        return InputImageFormat.yuv420;
+      case ImageFormatGroup.bgra8888:
+        return InputImageFormat.bgra8888;
+      default:
+        throw Exception('Image format not supported');
     }
-    final bytes = allBytes.done().buffer.asUint8List();
-
-    final Size imageSize =
-        Size(image.width.toDouble(), image.height.toDouble());
-    final inputImageFormat =
-        InputImageFormatValue.fromRawValue(image.format.raw) ??
-            InputImageFormat.yuv420;
-
-    final planeData = image.planes.map(
-      (Plane plane) {
-        return InputImagePlaneMetadata(
-          bytesPerRow: plane.bytesPerRow,
-          height: plane.height,
-          width: plane.width,
-        );
-      },
-    ).toList();
-
-    final inputImageData = InputImageData(
-      size: imageSize,
-      imageRotation: rotation,
-      inputImageFormat: inputImageFormat,
-      planeData: planeData,
-    );
-
-    return faceDetector.processImage(
-      InputImage.fromBytes(bytes: bytes, inputImageData: inputImageData),
-    );
   }
 
   void dispose() {
-    _faceDetector.close();
+    try {
+      _faceDetector.close();
+    } catch (e) {
+      //print for debugging.
+      logger.d('Error disposing FaceDetectorService: $e');
+    }
   }
 }
