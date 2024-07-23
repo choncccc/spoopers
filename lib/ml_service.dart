@@ -25,7 +25,6 @@ class MLService {
   // = = = = = = = = = = = //
   //  ANTI SPOOFING (ONNX) //
   // = = = = = = = = = = = //
-
   Future<OrtSession> loadModelFromAssets() async {
     OrtEnv.instance.init();
     final sessionOptions = OrtSessionOptions();
@@ -105,7 +104,6 @@ class MLService {
   // = = = = = = = = = = = = = = = //
   //   FACE RECOGNITION (TFLITE)   //
   // = = = = = = = = = = = = = = = //
-
   Future<void> initialize() async {
     late Delegate delegate;
     try {

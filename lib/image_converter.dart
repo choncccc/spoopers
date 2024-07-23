@@ -42,7 +42,6 @@ imglib.Image _convertYUV420(CameraImage image) {
   final int uvRowStride = image.planes[1].bytesPerRow;
   final int uvPixelStride =
       image.planes[1].bytesPerPixel ?? 1; // Handle null case
-
   const int hexFF = 0xFF000000;
 
   for (int y = 0; y < heighrt; y++) {
